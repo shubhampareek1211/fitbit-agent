@@ -1,0 +1,25 @@
+# Secrets — never commit
+client_secret*.json
+credentials.json
+*.pem
+.env
+.env.*
+
+# Raw high-frequency exports are large; commit processed/compressed data instead
+data/raw/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+.vscode/
+
+# Local env / tooling
+.venv/
+logs/
+data_export.log
+*.log

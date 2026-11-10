@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pulse</title>
+  <meta name="description" content="A team of AI agents that researches your own wearable data and shows its work.">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="dot"></span>Pulse</div>
+  <div class="asof" id="asof">loading data…</div>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>Ask your wearable data a real question.</h1>
+    <p class="lede">Pulse is a team of AI agents that researches <strong>one person's own Fitbit and iPhone data</strong>,
+      plus New York City weather, and answers with numbers you can check. Every figure is computed by code, cited,
+      and verified before you see it. When the data can't answer, Pulse says so.</p>
+    <div class="how">
+      <div><b>Who it's for</b><span>Anyone with a wearable who wants honest answers, not a dashboard. This demo uses the author's data.</span></div>
+      <div><b>How it works</b><span>A Gatekeeper checks the question, a Lead splits it, Researchers work in parallel, a Writer reports, and a Verifier checks every number.</span></div>
+      <div><b>How to use it</b><span>Pick a question below or type your own. Vague questions get a clarifying question back.</span></div>
+    </div>
+  </section>
+
+  <section class="ask">
+    <div class="chips" id="chips"></div>
+    <form id="form">
+      <input id="q" autocomplete="off" placeholder="e.g. Did I sleep more on weekends in November?" maxlength="400">
+      <button id="go" type="submit">Ask</button>
+    </form>
+    <div class="thread" id="thread"></div>
+  </section>
+
+  <section class="run hidden" id="run">
+    <div class="runhead"><h2>Research in progress</h2><span id="timer">0s</span></div>
+    <div class="lanes" id="lanes"></div>
+  </section>
+
+  <section class="report hidden" id="report">
+    <div class="reporthead"><h2>Answer</h2><span id="badge" class="badge"></span></div>
+    <article id="answer"></article>
+    <div class="chartwrap hidden" id="answerChartWrap"><canvas id="answerChart"></canvas></div>
+    <details class="trace"><summary>Show every tool call (<span id="ncalls">0</span>)</summary><ol id="calls"></ol></details>
+  </section>
+
+  <section class="data">
+    <h2>What's in the data</h2>
+    <p class="muted" id="window"></p>
+    <div class="chartwrap"><canvas id="stepsChart"></canvas></div>
+    <p class="muted small">Steps before the watch arrived come only from the phone, which misses steps when it isn't carried. Pulse accounts for this. Raw numbers would make the jump look like a lifestyle change.</p>
+    <div class="coverage" id="coverage"></div>
+  </section>
+
+  <section class="mcp">
+    <h2>Use Pulse from your own chatbot</h2>
+    <p>The same verified tools are exposed over MCP. In Claude, add a custom connector with this URL. Any MCP client works.</p>
+    <code id="mcpurl"></code>
+  </section>
+</main>
+<footer>Pulse describes data. It is not medical advice. IEOR 4570 Project 2.</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

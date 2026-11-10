@@ -1,0 +1,26 @@
+[project]
+name = "pulse"
+version = "0.1.0"
+description = "Pulse: a verified multi-agent deep-research analyst over personal wearable data"
+requires-python = ">=3.12"
+dependencies = [
+    "duckdb>=2.0.0",
+    "fastapi>=0.162.2",
+    "fastmcp>=4.1.6",
+    "google-adk>=2.14.0",
+    "httpx>=0.28.1",
+    "numpy>=2.5.4",
+    "pydantic>=2.14.3",
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
+    "scipy>=1.18.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "anthropic[vertex]>=2.6.0",
+    "inspect-ai>=0.3.288",
+    "litellm>=1.108.3",
+    "pytest>=9.2.0",
+]

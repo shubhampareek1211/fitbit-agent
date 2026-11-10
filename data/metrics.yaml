@@ -1,0 +1,126 @@
+# Metric catalog (hand-written). Column names match the `daily` table.
+# `reference` entries are public guidelines or research findings used for comparison, never for diagnosis.
+metrics:
+  steps:
+    unit: steps
+    description: Daily step total from the Google Health API (merges watch and phone; canonical number).
+    caveat: Before 2026-10-31 steps come only from the iPhone, which undercounts when the phone is not carried. steps_watch / steps_phone explain disagreements.
+    reference:
+      target: 7000
+      op: ">="
+      period: day
+      label: "About 7,000+ steps/day is associated with lower all-cause mortality (research finding, not an official guideline)"
+      source_name: "Paluch et al., Lancet Public Health (2022)"
+      source_url: "https://doi.org/10.1016/S2468-2667(21)00302-9"
+  steps_watch:
+    unit: steps
+    description: Steps counted by the Fitbit Edge watch only.
+    caveat: Only exists from 2026-10-31. Low values can mean the watch was not worn.
+  steps_phone:
+    unit: steps
+    description: Steps counted by the iPhone (Apple Health) only.
+    caveat: Undercounts when the phone is not carried.
+  distance_km:
+    unit: km
+    description: Daily distance travelled.
+    caveat: Phone only before 2026-10-31, phone + watch after, so it jumps at that date for measurement reasons (no phone-only version).
+  floors:
+    unit: floors
+    description: Floors climbed.
+    caveat: Phone only before 2026-10-31, phone + watch after, so it jumps at that date for measurement reasons (no phone-only version).
+  active_kcal:
+    unit: kcal
+    description: Active energy burned through movement.
+    caveat: Phone only before 2026-10-31, watch estimate after (about 7x higher), so never compare across that date (no phone-only version).
+  azm_total:
+    unit: minutes
+    description: Fitbit Active Zone Minutes (time in fat-burn, cardio and peak heart-rate zones; vigorous minutes count double).
+    caveat: Watch only, from 2026-10-31.
+    reference:
+      target: 150
+      op: ">="
+      period: week
+      label: "Adults: at least 150 minutes of moderate-intensity activity per week"
+      source_name: "CDC Physical Activity Guidelines for Adults"
+      source_url: "https://www.cdc.gov/physical-activity-basics/guidelines/adults.html"
+  active_minutes:
+    unit: minutes
+    description: Minutes at light, moderate or vigorous activity level.
+    caveat: Watch only, from 2026-10-30.
+  sedentary_minutes:
+    unit: minutes
+    description: Time spent sedentary during the day.
+  hr_avg:
+    unit: bpm
+    description: Average heart rate across the day.
+  resting_hr:
+    unit: bpm
+    description: Daily resting heart rate (computed by Fitbit, including sleep).
+    caveat: Watch only, from 2026-11-01.
+    reference:
+      low: 60
+      high: 100
+      op: between
+      period: day
+      label: "Typical adult resting heart rate is 60-100 bpm (well-trained people can be lower)"
+      source_name: "American Heart Association"
+      source_url: "https://www.heart.org/en/health-topics/high-blood-pressure/the-facts-about-high-blood-pressure/all-about-heart-rate-pulse"
+  hrv_ms:
+    unit: ms
+    description: Average heart rate variability (RMSSD) during sleep. Higher is generally better relative to your own baseline.
+    caveat: Highly individual; compare only to your own history. Watch only, from 2026-11-01.
+  spo2_avg:
+    unit: "%"
+    description: Average blood oxygen saturation during sleep (wrist estimate).
+    caveat: Consumer wrist estimate, not a medical measurement. Never used for diagnosis.
+  resp_rate:
+    unit: breaths/min
+    description: Average breathing rate during sleep.
+  skin_temp_dev_c:
+    unit: "°C"
+    description: Nightly skin temperature minus your personal baseline.
+  vo2max:
+    unit: ml/kg/min
+    description: Estimated VO2 max (cardio fitness score).
+  sleep_minutes:
+    unit: minutes
+    description: Minutes asleep in the main sleep that ended on this date (naps excluded).
+    caveat: Watch only, from 2026-11-01; a nightly sample this small cannot show long-term trends.
+    reference:
+      target: 420
+      op: ">="
+      period: day
+      label: "Adults should sleep 7 or more hours per night on a regular basis"
+      source_name: "AASM/SRS consensus; CDC"
+      source_url: "https://www.cdc.gov/sleep/about/index.html"
+  sleep_deep:
+    unit: minutes
+    description: Deep sleep minutes in the main sleep.
+  sleep_rem:
+    unit: minutes
+    description: REM sleep minutes in the main sleep.
+  sleep_light:
+    unit: minutes
+    description: Light sleep minutes in the main sleep.
+  sleep_efficiency:
+    unit: "%"
+    description: Minutes asleep divided by time in bed for the main sleep.
+  nap_minutes:
+    unit: minutes
+    description: Minutes asleep in naps.
+  exercise_sessions:
+    unit: sessions
+    description: Number of logged exercise sessions (mostly auto-detected walks).
+  temp_mean_c:
+    unit: "°C"
+    description: Daily mean outdoor temperature in New York City (Open-Meteo).
+    caveat: Assumes you were in NYC; travel days would be misattributed.
+  temp_max_c:
+    unit: "°C"
+    description: Daily max outdoor temperature in New York City (Open-Meteo).
+  precip_mm:
+    unit: mm
+    description: Daily precipitation in New York City (Open-Meteo). A day with >= 1 mm counts as a rainy day.
+  daylight_hours:
+    unit: hours
+    description: Hours of daylight in New York City.
