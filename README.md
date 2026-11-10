@@ -2,7 +2,7 @@
 
 **Live:** https://pulse-405277086961.us-central1.run.app · **Path:** research · **Author:** sp4553
 
-Pulse answers real questions about **one person's own Fitbit and iPhone data** (plus New York City weather) with a
+Pulse answers real questions about **one person's own Fitbit and iPhone data** (plus weather) with a
 team of AI agents that plan, research in parallel, write, and then **verify every number before you see it**.
 When the data can't answer, it says so, and it never diagnoses.
 
