@@ -137,6 +137,7 @@ async def overview() -> dict:
                       "watch": [r[2] for r in steps], "phone": [r[3] for r in steps]}}
 
 
+@app.get("/health")  # Cloud Run reserves paths ending in "z", so /healthz only answers locally
 @app.get("/healthz")
 async def healthz() -> dict:
     return {"ok": True, "asof": asof()}

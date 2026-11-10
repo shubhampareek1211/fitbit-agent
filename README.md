@@ -1,6 +1,6 @@
 # Pulse: a deep-research team for your own wearable data
 
-**Live:** `DEPLOY_URL` · **Path:** research · **Author:** sp4553
+**Live:** https://pulse-405277086961.us-central1.run.app · **Path:** research · **Author:** sp4553
 
 Pulse answers real questions about **one person's own Fitbit and iPhone data** (plus New York City weather) with a
 team of AI agents that plan, research in parallel, write, and then **verify every number before you see it**.
@@ -72,7 +72,7 @@ has no tools, so it has no entries. These records are there so the fan-out, the 
 verification show up in the trace.
 
 Also: `GET /run?question=` (server-sent events that drive the live agent lanes in the UI), `GET /api/overview`,
-`/mcp/` (MCP, tools only), `GET /healthz`.
+`/mcp/` (MCP, tools only), `GET /health`.
 
 ---
 
@@ -221,7 +221,8 @@ earlier runs recomputed from their stored traces).
 
 ## Use it from your own chatbot (MCP)
 
-The deterministic tools are served over MCP (streamable HTTP, stateless) at `DEPLOY_URL/mcp/`:
+The deterministic tools are served over MCP (streamable HTTP, stateless) at
+`https://pulse-405277086961.us-central1.run.app/mcp/`:
 `get_coverage`, `list_metrics`, `get_daily`, `summarize_metric`, `compare_periods`, `compare_groups`, `correlate`,
 `check_guideline`, `sleep_sessions`. Every result carries an `evidence_id`. In Claude: *Settings → Connectors → Add
 custom connector →* the URL above. Test locally with `npx @modelcontextprotocol/inspector`.
