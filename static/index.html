@@ -4,57 +4,68 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pulse</title>
-  <meta name="description" content="A team of AI agents that researches your own wearable data and shows its work.">
+  <meta name="description" content="Agent-powered analytics for your health data: a team of AI agents that researches your own workouts, heart rate, sleep and activity, and shows its work.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Figtree:wght@400;600&family=IBM+Plex+Mono:wght@400&display=swap">
   <link rel="stylesheet" href="/static/styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 </head>
 <body>
-<header class="top">
-  <div class="brand"><span class="dot"></span>Pulse</div>
-  <div class="asof" id="asof">loading data…</div>
-</header>
+<header class="top"><div>
+  <div class="brand">
+    <svg aria-hidden="true" width="28" height="28" viewBox="0 0 28 28"><rect class="b1" x="1" y="14" width="5" height="12" rx="2.5"/><rect class="b2" x="8" y="8" width="5" height="18" rx="2.5"/><rect class="b3" x="15" y="2" width="5" height="24" rx="2.5"/><rect class="b4" x="22" y="11" width="5" height="15" rx="2.5"/></svg>
+    Pulse
+  </div>
+  <div class="status"><span class="asof" id="asof">loading data…</span><span class="fresh" id="fresh"></span></div>
+</div></header>
 
 <main>
   <section class="hero">
-    <h1>Ask your wearable data a real question.</h1>
-    <p class="lede">Pulse is a team of AI agents that researches <strong>one person's own Fitbit and iPhone data</strong>,
-      plus New York City weather, and answers with numbers you can check. Every figure is computed by code, cited,
-      and verified before you see it. When the data can't answer, Pulse says so.</p>
-    <div class="how">
-      <div><b>Who it's for</b><span>Anyone with a wearable who wants honest answers, not a dashboard. This demo uses the author's data.</span></div>
-      <div><b>How it works</b><span>A Gatekeeper checks the question, a Lead splits it, Researchers work in parallel, a Writer reports, and a Verifier checks every number.</span></div>
-      <div><b>How to use it</b><span>Pick a question below or type your own. Vague questions get a clarifying question back.</span></div>
+    <div class="pitch">
+      <span class="label eyebrow">Agent-powered analytics for your health data</span>
+      <h1>Ask your body of data a real question.</h1>
+      <p class="lede">A team of AI agents researches one person's own Fitbit and iPhone health data: workouts, heart rate,
+        sleep and activity. Every number is computed by code, cited, and checked before you see it. When the data can't
+        answer, Pulse says so.</p>
     </div>
+    <dl class="stats" id="stats"></dl>
   </section>
 
   <section class="ask">
-    <div class="chips" id="chips"></div>
     <form id="form">
-      <input id="q" autocomplete="off" placeholder="e.g. Did I sleep more on weekends in November?" maxlength="400">
-      <button id="go" type="submit">Ask</button>
+      <label for="q" class="hidden">Your question</label>
+      <input id="q" autocomplete="off" placeholder="e.g. How was my workout yesterday evening?" maxlength="400">
+      <button id="go" type="submit">Ask Pulse</button>
     </form>
+    <div class="chips" id="chips"></div>
+    <p class="muted small addon">Add-on: local weather is joined to each day, so you can also ask <button class="chip" id="addon" type="button"></button></p>
     <div class="thread" id="thread"></div>
+    <div class="how">
+      <div><b>Who it's for</b><span>Anyone with a wearable who wants honest answers, not a dashboard. This demo uses the author's data.</span></div>
+      <div><b>How it works</b><span>A Gatekeeper checks the question, a Lead splits it, Researchers work in parallel, a Writer reports, and a Verifier checks every number.</span></div>
+      <div><b>How to use it</b><span>Pick a question or type your own. Vague questions get a clarifying question back.</span></div>
+    </div>
   </section>
 
   <section class="run hidden" id="run">
-    <div class="runhead"><h2>Research in progress</h2><span id="timer">0s</span></div>
+    <div class="runhead"><h2>The team at work</h2><span id="timer">0s</span></div>
     <div class="lanes" id="lanes"></div>
   </section>
 
   <section class="report hidden" id="report">
     <div class="reporthead"><h2>Answer</h2><span id="badge" class="badge"></span></div>
     <article id="answer"></article>
-    <div class="chartwrap hidden" id="answerChartWrap"><canvas id="answerChart"></canvas></div>
+    <div class="figures" id="charts"></div>
     <details class="trace"><summary>Show every tool call (<span id="ncalls">0</span>)</summary><ol id="calls"></ol></details>
   </section>
 
   <section class="data">
     <h2>What's in the data</h2>
     <p class="muted" id="window"></p>
-    <div class="chartwrap"><canvas id="stepsChart"></canvas></div>
-    <p class="muted small">Steps before the watch arrived come only from the phone, which misses steps when it isn't carried. Pulse accounts for this. Raw numbers would make the jump look like a lifestyle change.</p>
+    <div class="figures" id="overviewCharts"></div>
     <div class="coverage" id="coverage"></div>
   </section>
 
@@ -65,6 +76,7 @@
   </section>
 </main>
 <footer>Pulse describes data. It is not medical advice. IEOR 4570 Project 2.</footer>
+<script src="/static/charts.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

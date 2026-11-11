@@ -23,3 +23,7 @@ __pycache__/
 logs/
 data_export.log
 *.log
+
+# Daily snapshots live in Cloud Storage; only the eval snapshot is committed (it is also the offline fallback).
+data/snapshots/*
+!data/snapshots/2026-11-07/

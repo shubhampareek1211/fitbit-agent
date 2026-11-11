@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from pulse import charts
 from pulse.data import asof, db, first_date, meta
 from pulse.mcp_server import mcp_app
 from pulse.orchestrator import PENDING, answer
@@ -24,10 +25,11 @@ app.mount("/mcp", mcp_app)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 SAMPLE_QUESTIONS = [
-    "How do temperature and rain change how much I walk?",
+    "How hard have my workouts been since I got the watch, and which were the most intense?",
     "What's my weekly activity rhythm, and did it change after I started wearing the Fitbit?",
     "Am I meeting CDC/AHA targets for activity and sleep, and where can't my data tell?",
 ]
+ADDON_QUESTION = "How do temperature and rain change how much I walk?"  # weather is an add-on, not a core question
 
 
 class ChatRequest(BaseModel):
@@ -42,6 +44,7 @@ class ChatResponse(BaseModel):
     status: str = "answer"
     verified: bool | None = None
     seconds: float | None = None
+    charts: list[dict] = []  # ECharts options built by code from the cited evidence (optional extra)
 
 
 def _log(result, message: str) -> None:
@@ -60,7 +63,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         r = await answer(request.message, session_id)
         _log(r, request.message)
         return ChatResponse(response=r.response, session_id=r.session_id, tool_calls=r.tool_calls, status=r.status,
-                            verified=(r.verify or {}).get("passed"), seconds=r.seconds)
+                            verified=(r.verify or {}).get("passed"), seconds=r.seconds, charts=r.charts)
     except Exception as e:  # same contract as Project 1: errors come back as a message, not a 500
         log.exception("chat failed")
         return ChatResponse(response=f"Model call failed: {type(e).__name__}: {str(e)[:300]}",
@@ -88,7 +91,7 @@ async def run(question: str = Query(...), session_id: str | None = None) -> Stre
             _log(r, question)
             await queue.put({"type": "done", "markdown": r.response, "session_id": r.session_id,
                              "status": r.status, "tool_calls": r.tool_calls, "verify": r.verify,
-                             "seconds": r.seconds, "chart": _chart_from(r)})
+                             "seconds": r.seconds, "charts": r.charts})
         except Exception as e:
             log.exception("run failed")
             await queue.put({"type": "error", "message": f"{type(e).__name__}: {str(e)[:300]}"})
@@ -109,32 +112,19 @@ async def run(question: str = Query(...), session_id: str | None = None) -> Stre
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-def _chart_from(result) -> dict | None:
-    """A daily series for the report's main metric, drawn by the frontend."""
-    brief = result.brief or {}
-    metrics = [m for m in brief.get("metrics", []) if m][:2]
-    if result.status != "answer" or not metrics or not brief.get("start"):
-        return None
-    cols = ", ".join(metrics)
-    try:
-        rows = db().execute(f"SELECT date::VARCHAR, {cols} FROM daily WHERE date BETWEEN ? AND ? ORDER BY date",
-                            [brief["start"], brief["end"] or asof()]).fetchall()
-    except Exception:
-        return None
-    return {"metrics": metrics, "dates": [r[0] for r in rows],
-            "series": [[r[i + 1] for r in rows] for i in range(len(metrics))]}
-
-
 @app.get("/api/overview")
 async def overview() -> dict:
     cov = db().execute("SELECT metric, unit, first_date::VARCHAR, last_date::VARCHAR, days_with_data FROM coverage "
                        "WHERE days_with_data > 0 ORDER BY days_with_data DESC, metric").fetchall()
-    steps = db().execute("SELECT date::VARCHAR, steps, steps_watch, steps_phone FROM daily ORDER BY date").fetchall()
+    workouts, nights, step_days = db().execute(
+        "SELECT (SELECT count(*) FROM exercise), (SELECT count(*) FROM sleep_sessions WHERE NOT is_nap), "
+        "(SELECT count(steps) FROM daily)").fetchone()
     return {"asof": asof(), "first_date": first_date(), "location": meta().get("location"),
-            "samples": SAMPLE_QUESTIONS,
+            "fetched_at": meta().get("fetched_at") or None,
+            "stats": [["Workouts", workouts], ["Nights of sleep", nights], ["Days of steps", step_days]],
+            "samples": SAMPLE_QUESTIONS, "addon": ADDON_QUESTION,
             "coverage": [dict(zip(["metric", "unit", "first_date", "last_date", "days"], r)) for r in cov],
-            "steps": {"dates": [r[0] for r in steps], "total": [r[1] for r in steps],
-                      "watch": [r[2] for r in steps], "phone": [r[3] for r in steps]}}
+            "charts": charts.overview()}
 
 
 @app.get("/health")  # Cloud Run reserves paths ending in "z", so /healthz only answers locally

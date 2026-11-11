@@ -33,6 +33,11 @@ def asof() -> str:
     return meta()["asof"]
 
 
+def through() -> str:
+    """The day of the last fetch: sleep sessions and workouts exist up to it; daily metrics stop at asof()."""
+    return meta().get("data_through") or asof()
+
+
 def first_date() -> str:
     return meta()["first_date"]
 

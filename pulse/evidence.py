@@ -19,10 +19,12 @@ class Evidence:
     values: dict[str, float]          # named numbers that may be cited
     note: str = ""
     source_url: str | None = None
+    context: dict = field(default_factory=dict)  # non-numeric labels (verdicts, weeks) for charts; never cited
+    n_unit: str = "day"  # what n counts: day, week, workout, 10-second step
 
     def footnote(self) -> str:
         rng = f"{self.date_range[0]} to {self.date_range[1]}" if self.date_range else "all dates"
-        n = f", n={self.n} days" if self.n is not None else ""
+        n = f", n={self.n} {self.n_unit}{'' if self.n == 1 else 's'}" if self.n is not None else ""
         src = f" ({self.source_url})" if self.source_url else ""
         return f"[{self.id}] `{self.tool}` on `{self.table}`, {rng}{n}{src}"
 

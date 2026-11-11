@@ -1,16 +1,62 @@
 """Central configuration: paths, models, and hard caps (caps live in code, not prompts)."""
+import json
+import logging
 import os
+import threading
+import time
 from pathlib import Path
+
+log = logging.getLogger("pulse")
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOTS = ROOT / "data" / "snapshots"
 METRICS_YAML = ROOT / "data" / "metrics.yaml"
 
 
+BUCKET = os.environ.get("PULSE_BUCKET")           # if set, the newest snapshot is loaded from Cloud Storage
+REFRESH_CHECK_S = int(os.environ.get("PULSE_REFRESH_CHECK_S", "600"))  # how often to look for a newer one
+CACHE = Path(os.environ.get("PULSE_CACHE", "/tmp/pulse-snapshots"))
+_remote = {"checked": 0.0, "path": None, "generation": None}
+_lock = threading.Lock()
+
+
+def _remote_snapshot() -> Path | None:
+    """The newest snapshot in the bucket, downloaded once per version. The scheduled refresh uploads
+    snapshots/<day>/pulse.duckdb and then rewrites latest.json, so readers never see a half-written file.
+    Any failure (no network, no permission, bad pointer) keeps the snapshot already in use."""
+    now = time.monotonic()
+    with _lock:
+        if _remote["path"] and now - _remote["checked"] < REFRESH_CHECK_S:
+            return _remote["path"]
+        _remote["checked"] = now
+        try:
+            from google.cloud import storage
+            bucket = storage.Client().bucket(BUCKET)
+            latest = json.loads(bucket.blob("latest.json").download_as_text())
+            blob = bucket.get_blob(latest["object"])
+            if blob is None:
+                raise FileNotFoundError(latest["object"])
+            if blob.generation != _remote["generation"]:
+                CACHE.mkdir(parents=True, exist_ok=True)
+                target = CACHE / f"{latest['day']}-{blob.generation}.duckdb"
+                if not target.exists():
+                    tmp = target.with_suffix(".part")
+                    blob.download_to_filename(str(tmp))
+                    tmp.rename(target)
+                _remote.update(path=target, generation=blob.generation)
+                log.info("snapshot %s (as of %s, fetched %s) loaded from gs://%s", latest["day"],
+                         latest.get("asof"), latest.get("fetched_at"), BUCKET)
+        except Exception as e:  # keep serving what we have
+            log.warning("snapshot refresh from gs://%s failed: %s: %s", BUCKET, type(e).__name__, str(e)[:200])
+        return _remote["path"]
+
+
 def latest_snapshot() -> Path:
     override = os.environ.get("PULSE_SNAPSHOT")
     if override:
         return Path(override)
+    if BUCKET and (remote := _remote_snapshot()):
+        return remote
     dirs = sorted(p for p in SNAPSHOTS.iterdir() if (p / "pulse.duckdb").exists())
     if not dirs:
         raise SystemExit("No snapshot found. Run: uv run build/normalize.py")

@@ -1,8 +1,6 @@
 const $ = (id) => document.getElementById(id);
 let sessionId = null;
 let source = null;
-let stepsChart = null, answerChart = null;
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
 function laneFor(agent) {
   const key = agent.startsWith("Researcher") ? agent : agent;
@@ -57,20 +55,6 @@ function renderCalls(calls) {
   }
 }
 
-function lineChart(canvas, labels, datasets, existing) {
-  if (existing) existing.destroy();
-  const palette = [css("--accent"), css("--c-res"), css("--c-ver")];
-  return new Chart(canvas, {
-    type: "line",
-    data: { labels, datasets: datasets.map((d, i) => ({ ...d, borderColor: palette[i], backgroundColor: palette[i],
-      pointRadius: 0, borderWidth: 2, spanGaps: false, tension: 0.2 })) },
-    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
-      plugins: { legend: { labels: { color: css("--muted"), boxWidth: 12 } } },
-      scales: { x: { ticks: { color: css("--muted"), maxTicksLimit: 8 }, grid: { display: false } },
-                y: { ticks: { color: css("--muted") }, grid: { color: css("--line") } } } },
-  });
-}
-
 function ask(question) {
   if (!question.trim()) return;
   if (source) source.close();
@@ -104,13 +88,9 @@ function ask(question) {
       renderCalls(ev.tool_calls);
       const ok = ev.verify && ev.verify.passed;
       $("badge").className = `badge ${ok ? "ok" : "warn"}`;
-      $("badge").textContent = ok ? `Verified · ${ev.verify.numbers_checked} numbers checked · ${ev.seconds}s`
+      $("badge").textContent = ok ? `Verified · ${ev.verify.numbers_checked} numbers checked · ${ev.seconds} s`
                                   : "Partly verified, see note";
-      if (ev.chart && ev.chart.dates.length > 1) {
-        $("answerChartWrap").classList.remove("hidden");
-        answerChart = lineChart($("answerChart"), ev.chart.dates,
-          ev.chart.metrics.map((m, i) => ({ label: m, data: ev.chart.series[i] })), answerChart);
-      } else $("answerChartWrap").classList.add("hidden");
+      Charts.render($("charts"), ev.charts);
       $("report").scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
@@ -119,7 +99,14 @@ function ask(question) {
 
 async function init() {
   const o = await (await fetch("/api/overview")).json();
-  $("asof").textContent = `data through ${o.asof}`;
+  $("asof").textContent = `Data through ${o.asof}`;
+  $("fresh").textContent = o.fetched_at ? `Refreshed ${o.fetched_at.slice(5)}` : "";
+  for (const [label, value] of o.stats || []) {
+    const div = document.createElement("div");
+    div.appendChild(Object.assign(document.createElement("dt"), { textContent: label }));
+    div.appendChild(Object.assign(document.createElement("dd"), { textContent: value }));
+    $("stats").appendChild(div);
+  }
   $("window").textContent = `${o.first_date} → ${o.asof} · ${o.location}. "Today" for every question is ${o.asof}.`;
   for (const q of o.samples) {
     const b = document.createElement("button");
@@ -127,15 +114,15 @@ async function init() {
     b.onclick = () => ask(q);
     $("chips").appendChild(b);
   }
+  $("addon").textContent = o.addon;
+  $("addon").onclick = () => ask(o.addon);
   $("coverage").innerHTML = o.coverage.map((c) =>
     `<div><b>${c.metric}</b>${c.days} days · ${c.first_date.slice(5)}→${c.last_date.slice(5)}</div>`).join("");
-  stepsChart = lineChart($("stepsChart"), o.steps.dates, [
-    { label: "steps (merged total)", data: o.steps.total },
-    { label: "watch", data: o.steps.watch },
-    { label: "phone", data: o.steps.phone },
-  ]);
+  Charts.render($("overviewCharts"), o.charts);
   $("mcpurl").textContent = `${location.origin}/mcp/`;
 }
 
+// A link such as /?q=How+was+my+workout+yesterday asks that question on load, so an answer can be shared.
+const preset = new URLSearchParams(location.search).get("q");
 $("form").onsubmit = (e) => { e.preventDefault(); const q = $("q").value; $("q").value = ""; ask(q); };
-init();
+init().then(() => { if (preset) ask(preset.slice(0, 400)); });

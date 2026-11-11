@@ -5,10 +5,13 @@ Usage: uv run build/normalize.py [--raw data/raw] [--asof YYYY-MM-DD] [--out dat
 Produces data/snapshots/<asof>/pulse.duckdb with tables:
   daily           one row per date (activity, heart, sleep summary, weather)
   sleep_sessions  one row per sleep session (stages, nap flag)
-  exercise        one row per exercise session
+  exercise        one row per workout (type, heart-rate zone minutes, started on the watch or auto-detected, visit)
+  workout_hr      heart rate through each workout visit, averaged into 10-second steps
   coverage        per metric: source, first/last date, days with data
   meta            asof, built_at, user, location
-`asof` defaults to yesterday (the last complete day). Nothing after asof is kept.
+Times are stored twice: as TIMESTAMPTZ and as local wall-clock time (*_local). The app reads the local columns, because
+its read-only DuckDB connection can't load the time-zone extension and would show TIMESTAMPTZ values in UTC.
+`asof` defaults to yesterday (the last complete day). The daily table keeps nothing after asof; sessions (sleep, workouts) are kept up to --through, the fetch day.
 """
 import argparse
 import json
@@ -53,6 +56,63 @@ DAILY_COLUMNS = {  # column -> (unit, source description)
 }
 
 
+VISIT_GAP_MIN = 10  # workouts less than this many minutes apart form one visit (e.g. one trip to the gym)
+HR_STEP_S = 10      # intraday heart rate (a reading every ~2 s) is averaged into steps of this many seconds
+ZONES = ("light", "moderate", "vigorous", "peak")
+
+SLEEP_SQL = """CREATE TABLE sleep_sessions (id VARCHAR, date DATE, start TIMESTAMPTZ, "end" TIMESTAMPTZ,
+    start_local TIMESTAMP, end_local TIMESTAMP, is_nap BOOLEAN, minutes_asleep DOUBLE, minutes_awake DOUBLE,
+    total_minutes DOUBLE, deep DOUBLE, rem DOUBLE, light DOUBLE, efficiency DOUBLE, source VARCHAR)"""
+EXERCISE_SQL = """CREATE TABLE exercise (id VARCHAR, date DATE, start TIMESTAMPTZ, "end" TIMESTAMPTZ,
+    start_local TIMESTAMP, end_local TIMESTAMP, type VARCHAR, name VARCHAR, active_minutes DOUBLE, steps DOUBLE,
+    distance_km DOUBLE, kcal DOUBLE, avg_hr DOUBLE, azm DOUBLE, light_min DOUBLE, moderate_min DOUBLE,
+    vigorous_min DOUBLE, peak_min DOUBLE, started_on_watch BOOLEAN, visit INTEGER, source VARCHAR)"""
+WORKOUT_HR_SQL = "CREATE TABLE workout_hr (visit INTEGER, offset_s INTEGER, bpm DOUBLE)"
+
+
+def local(ts: str) -> str:
+    """Wall-clock time of an ISO timestamp: the raw data carries each reading's local UTC offset."""
+    return datetime.fromisoformat(ts).replace(tzinfo=None).isoformat(sep=" ", timespec="seconds")
+
+
+def assign_visits(workouts: list[dict], gap_min: int = VISIT_GAP_MIN) -> None:
+    """Number workouts by visit: one that starts within gap_min of the previous one's end joins its visit."""
+    visit, last_end = 0, None
+    for w in sorted(workouts, key=lambda w: datetime.fromisoformat(w["start"])):
+        start, end = datetime.fromisoformat(w["start"]), datetime.fromisoformat(w["end"])
+        if last_end is None or (start - last_end).total_seconds() > gap_min * 60:
+            visit, last_end = visit + 1, end
+        else:
+            last_end = max(last_end, end)
+        w["visit"] = visit
+
+
+def heart_rate_steps(readings: list[tuple[datetime, float]], start: datetime, end: datetime,
+                     step_s: int = HR_STEP_S) -> list[tuple[int, float]]:
+    """Average the readings between start and end into step_s-second steps: [(offset_s, bpm)]."""
+    bins: dict[int, list[float]] = defaultdict(list)
+    for t, bpm in readings:
+        if start <= t <= end:
+            bins[int((t - start).total_seconds() // step_s) * step_s].append(bpm)
+    return [(k, round(sum(v) / len(v), 1)) for k, v in sorted(bins.items())]
+
+
+def fill_zero_days(rows: dict[str, dict]) -> None:
+    """The API sends no record for a day whose value is zero (no Active Zone Minutes, no floors, no nap, no
+    workout), so those days would read as missing. Fill 0 where another reading shows the device was recording:
+    heart rate that day for zone minutes and workouts, a main sleep for naps, steps for floors (from the first
+    day floors exist). Days with no such reading stay empty: they really are unknown."""
+    first_floors = min((d for d, r in rows.items() if "floors" in r), default=None)
+    for day, r in rows.items():
+        if "hr_avg" in r:
+            r.setdefault("azm_total", 0.0)
+            r.setdefault("exercise_sessions", 0.0)
+        if "sleep_minutes" in r:
+            r.setdefault("nap_minutes", 0.0)
+        if "steps" in r and first_floors and day >= first_floors:
+            r.setdefault("floors", 0.0)
+
+
 def num(x):
     if x is None:
         return None
@@ -80,7 +140,11 @@ def dedupe_by_id(points: list[dict]) -> list[dict]:
     return list({p["id"]: p for p in points}.values())
 
 
-def build(raw: Path, asof: str, out_root: Path) -> Path:
+def build(raw: Path, asof: str, out_root: Path, through: str | None = None, fetched_at: str | None = None) -> Path:
+    """asof = the last complete day: the daily table stops there. through = the day of the fetch (>= asof): sleep
+    sessions and workouts are kept up to it, so today's workout shows without a half day skewing the daily averages.
+    The snapshot is written to out_root/<through>/."""
+    through = max(through or asof, asof)
     d, r = raw / "daily", raw / "records"
     rows: dict[str, dict] = defaultdict(dict)
 
@@ -139,11 +203,12 @@ def build(raw: Path, asof: str, out_root: Path) -> Path:
     for p in dedupe_by_id(load_points(r, "sleep")):
         st = p.get("stageMinutes", {})
         day = p["end"][:10]
-        if day > asof:
+        if day > through:
             continue
         total = p.get("totalMinutes") or 0
         sleep.append({
             "id": p["id"], "date": day, "start": p["start"], "end": p["end"],
+            "start_local": local(p["start"]), "end_local": local(p["end"]),
             "is_nap": bool(p.get("isNap", False)), "minutes_asleep": p.get("minutesAsleep"),
             "minutes_awake": p.get("minutesAwake"), "total_minutes": total,
             "deep": st.get("DEEP"), "rem": st.get("REM"), "light": st.get("LIGHT"),
@@ -167,19 +232,48 @@ def build(raw: Path, asof: str, out_root: Path) -> Path:
     exercise = []
     for p in dedupe_by_id(load_points(r, "exercise")):
         day = p["start"][:10]
-        if day > asof:
+        if day > through:
             continue
         m = p.get("metricsSummary", {})
+        zones = m.get("heartRateZoneDurations") or {}
+        dist = num(m.get("distanceMillimeters"))
         exercise.append({
             "id": p["id"], "date": day, "start": p["start"], "end": p["end"],
+            "start_local": local(p["start"]), "end_local": local(p["end"]),
             "type": p.get("exerciseType"), "name": p.get("displayName"),
             "active_minutes": round((num(p.get("activeDuration")) or 0) / 60, 1),
-            "steps": num(m.get("steps")), "distance_km": round((m.get("distanceMillimeters") or 0) / 1e6, 3),
+            # Rowing and weights have no distance: keep it unknown, not 0 km.
+            "steps": num(m.get("steps")), "distance_km": None if dist is None else round(dist / 1e6, 3),
             "kcal": m.get("caloriesKcal"), "avg_hr": num(m.get("averageHeartRateBeatsPerMinute")),
-            "azm": num(m.get("activeZoneMinutes")), "source": p.get("source"),
+            "azm": num(m.get("activeZoneMinutes")),
+            **{f"{z}_min": None if f"{z}Time" not in zones else round(num(zones[f"{z}Time"]) / 60, 1) for z in ZONES},
+            # A START event means the workout was started on the watch; without one, the watch detected it itself.
+            "started_on_watch": any(e.get("exerciseEventType") == "START" for e in p.get("exerciseEvents") or []),
+            "visit": None, "source": p.get("source"),
         })
     for day in {e["date"] for e in exercise}:
         put(day, "exercise_sessions", sum(1 for e in exercise if e["date"] == day))
+    assign_visits(exercise)
+
+    # Heart rate through each visit (first workout's start to last one's end, breaks included), for the workout traces.
+    hr_days: dict[str, list[tuple[datetime, float]]] = {}
+
+    def readings(day: str) -> list[tuple[datetime, float]]:
+        if day not in hr_days:
+            f = raw / "intraday" / "heart-rate" / f"{day}.json"
+            pts = json.loads(f.read_text()).get("dataPoints", []) if f.exists() else []
+            hr_days[day] = [(datetime.fromisoformat(p["time"]), num(p["beatsPerMinute"])) for p in pts
+                            if num(p.get("beatsPerMinute"))]
+        return hr_days[day]
+
+    workout_hr = []
+    for v in sorted({e["visit"] for e in exercise}):
+        ws = [e for e in exercise if e["visit"] == v]
+        start = min(datetime.fromisoformat(e["start"]) for e in ws)
+        end = max(datetime.fromisoformat(e["end"]) for e in ws)
+        days = {local(e["start"])[:10] for e in ws} | {local(e["end"])[:10] for e in ws}
+        workout_hr += [(v, off, bpm) for off, bpm in
+                       heart_rate_steps([r for d in sorted(days) for r in readings(d)], start, end)]
 
     weather_file = raw / "weather.json"
     location = None
@@ -192,6 +286,8 @@ def build(raw: Path, asof: str, out_root: Path) -> Path:
             put(day, "precip_mm", v["precipitation_sum"])
             put(day, "daylight_hours", round(v["daylight_duration"] / 3600, 2) if v["daylight_duration"] else None)
 
+    fill_zero_days(rows)
+
     # Dense date spine from first data day to asof, so missing days are explicit NULLs.
     first = min(rows)
     spine, cur = [], date.fromisoformat(first)
@@ -199,7 +295,7 @@ def build(raw: Path, asof: str, out_root: Path) -> Path:
         spine.append(cur.isoformat())
         cur += timedelta(days=1)
 
-    out_dir = out_root / asof
+    out_dir = out_root / through
     out_dir.mkdir(parents=True, exist_ok=True)
     db_path = out_dir / "pulse.duckdb"
     db_path.unlink(missing_ok=True)
@@ -212,18 +308,17 @@ def build(raw: Path, asof: str, out_root: Path) -> Path:
         [[day, date.fromisoformat(day).strftime("%A"), date.fromisoformat(day).weekday() >= 5]
          + [rows.get(day, {}).get(c) for c in cols] for day in spine],
     )
-    con.execute("""CREATE TABLE sleep_sessions (id VARCHAR, date DATE, start TIMESTAMPTZ, "end" TIMESTAMPTZ,
-        is_nap BOOLEAN, minutes_asleep DOUBLE, minutes_awake DOUBLE, total_minutes DOUBLE,
-        deep DOUBLE, rem DOUBLE, light DOUBLE, efficiency DOUBLE, source VARCHAR)""")
+    con.execute(SLEEP_SQL)
     if sleep:
-        con.executemany("INSERT INTO sleep_sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        con.executemany(f"INSERT INTO sleep_sessions VALUES ({', '.join('?' * len(sleep[0]))})",
                         [list(s.values()) for s in sleep])
-    con.execute("""CREATE TABLE exercise (id VARCHAR, date DATE, start TIMESTAMPTZ, "end" TIMESTAMPTZ,
-        type VARCHAR, name VARCHAR, active_minutes DOUBLE, steps DOUBLE, distance_km DOUBLE,
-        kcal DOUBLE, avg_hr DOUBLE, azm DOUBLE, source VARCHAR)""")
+    con.execute(EXERCISE_SQL)
     if exercise:
-        con.executemany("INSERT INTO exercise VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        con.executemany(f"INSERT INTO exercise VALUES ({', '.join('?' * len(exercise[0]))})",
                         [list(e.values()) for e in exercise])
+    con.execute(WORKOUT_HR_SQL)
+    if workout_hr:
+        con.executemany("INSERT INTO workout_hr VALUES (?, ?, ?)", workout_hr)
 
     con.execute("CREATE TABLE coverage (metric VARCHAR, unit VARCHAR, source VARCHAR, "
                 "first_date DATE, last_date DATE, days_with_data INTEGER)")
@@ -234,7 +329,8 @@ def build(raw: Path, asof: str, out_root: Path) -> Path:
 
     con.execute("CREATE TABLE meta (key VARCHAR, value VARCHAR)")
     con.executemany("INSERT INTO meta VALUES (?, ?)", [
-        ["asof", asof], ["first_date", first],
+        ["asof", asof], ["first_date", first], ["data_through", through],
+        ["fetched_at", fetched_at or ""],
         ["built_at", datetime.now(timezone.utc).isoformat(timespec="seconds")],
         ["user", "demo"], ["location", location or "unknown"],
     ])
@@ -247,8 +343,9 @@ if __name__ == "__main__":
     ap.add_argument("--raw", default="data/raw")
     ap.add_argument("--asof", default=(date.today() - timedelta(days=1)).isoformat())
     ap.add_argument("--out", default="data/snapshots")
+    ap.add_argument("--through", default=None, help="day of the fetch; sessions are kept up to it")
     a = ap.parse_args()
-    path = build(Path(a.raw), a.asof, Path(a.out))
+    path = build(Path(a.raw), a.asof, Path(a.out), a.through)
     con = duckdb.connect(str(path), read_only=True)
     print(f"built {path} ({path.stat().st_size / 1e6:.1f} MB)")
     print(con.sql("SELECT metric, first_date, last_date, days_with_data FROM coverage ORDER BY days_with_data DESC"))

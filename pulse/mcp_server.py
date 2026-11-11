@@ -14,7 +14,8 @@ mcp = FastMCP(
 )
 
 for fn in (tools.get_coverage, tools.list_metrics, tools.get_daily, tools.summarize_metric, tools.compare_periods,
-           tools.compare_groups, tools.correlate, tools.check_guideline, tools.sleep_sessions):
+           tools.compare_groups, tools.correlate, tools.check_guideline, tools.sleep_sessions, tools.workouts,
+           tools.workout_heart_rate):
     mcp.tool(fn)
 
 mcp_app = mcp.http_app(path="/", stateless_http=True)

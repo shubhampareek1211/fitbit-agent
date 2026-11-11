@@ -17,6 +17,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Gold answers are computed from this snapshot, so the evals always run against it, however fresh the live data is.
+import os  # noqa: E402
+os.environ.setdefault("PULSE_SNAPSHOT", str(Path(__file__).resolve().parent.parent / "data" / "snapshots"
+                                            / "2026-11-07" / "pulse.duckdb"))
 
 from inspect_ai import Task, task  # noqa: E402
 from inspect_ai.dataset import json_dataset  # noqa: E402
@@ -83,7 +87,7 @@ def _body(text: str) -> str:
 
 _WORDS = {w: str(i) for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve".split())}
-SINGLE_LOOKUP = {"lookup"}  # one number from one query: a single researcher is the right plan
+SINGLE_LOOKUP = {"lookup", "workout"}  # one query answers it: a single researcher is the right plan
 
 
 def _digits(text: str) -> str:

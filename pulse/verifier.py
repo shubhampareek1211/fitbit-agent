@@ -23,6 +23,9 @@ _MONTH = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?"
 DATE = re.compile(  # ISO dates, ISO months, "Nov 7(, 2026)", and "November 2026" (eval v2 found this false positive)
     rf"\b\d{{4}}-\d{{2}}-\d{{2}}\b|\b\d{{4}}-\d{{2}}\b|\b{_MONTH} \d{{1,2}}(?:st|nd|rd|th)?\b(?:,? \d{{4}})?"
     rf"|\b{_MONTH},? \d{{4}}\b", re.I)
+# Clock times ("19:01", "7:30 pm", "7 pm") and heart-rate zone names ("Zone 2") are labels, not data to check.
+TIME = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]\.?m\.?)?(?![\w:])|\b\d{1,2}\s*[ap]\.?m\.?(?![a-z])", re.I)
+ZONE_NAME = re.compile(r"\bzone\s*\d\b", re.I)
 LIMITS_HEADING = re.compile(r"can['’]?t tell|cannot tell|can not tell|limitations", re.I)
 DIAGNOSIS = re.compile(
     r"\byou (?:likely |probably |may |might )?have (?:a |an )?(?:sleep apnea|apnea|insomnia|arrhythmia|"
@@ -39,8 +42,8 @@ def _sentences(text: str) -> list[str]:
 
 
 def _numbers(sentence: str) -> list[tuple[float, int]]:
-    """Numbers as (value, decimals), ignoring dates, citation ids and list markers."""
-    s = CITE.sub(" ", DATE.sub(" ", sentence))
+    """Numbers as (value, decimals), ignoring dates, clock times, zone names, citation ids and list markers."""
+    s = CITE.sub(" ", ZONE_NAME.sub(" ", TIME.sub(" ", DATE.sub(" ", sentence))))
     s = re.sub(r"^\s*(?:\d+[.)]|[-*])\s+", " ", s)  # list markers
     out = []
     for m in NUMBER.finditer(s):

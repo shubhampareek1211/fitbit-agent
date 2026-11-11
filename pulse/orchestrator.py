@@ -17,6 +17,7 @@ from google.genai import types
 from pydantic import BaseModel
 
 from pulse import agents, config
+from pulse.charts import build_charts
 from pulse.data import asof
 from pulse.evidence import EvidenceLedger, new_ledger
 from pulse.schemas import Brief, Finding, LeadTurn, VerifyResult
@@ -38,6 +39,7 @@ class Result:
     rounds: int = 0
     researchers: int = 0
     seconds: float = 0.0
+    charts: list[dict] = field(default_factory=list)
 
 
 def _short(x, limit=600) -> str:
@@ -123,7 +125,7 @@ async def answer(message: str, session_id: str | None = None, emit: Emit = None)
 
     # 2. Lead <-> Researchers rounds ---------------------------------------------------------------
     findings: list[Finding] = []
-    launched, rounds = 0, 0
+    launched, rounds, lead_retried = 0, 0, False
     sem = asyncio.Semaphore(config.MAX_PARALLEL)
     brief_text = brief.model_dump_json(exclude_none=True)
 
@@ -144,8 +146,19 @@ async def answer(message: str, session_id: str | None = None, emit: Emit = None)
             lead_prompt += "\nFindings so far:\n" + json.dumps(
                 [f.model_dump(exclude_none=True) for f in findings], indent=1)
         await stage("Lead", "planning" if rounds == 1 else f"reviewing findings (round {rounds})")
-        turn = _parse(LeadTurn, await run_agent(agents.lead(), lead_prompt, "lead", trace, emit,
-                                                config.AGENT_TIMEOUT_S["lead"]))
+        try:
+            turn = _parse(LeadTurn, await run_agent(agents.lead(), lead_prompt, "lead", trace, emit,
+                                                    min(config.AGENT_TIMEOUT_S["lead"], max(remaining() - 40, 15))))
+        except Exception as e:  # a hung or unparseable Lead turn must not throw away the findings already made
+            trace.append({"agent": "Lead", "name": "plan" if rounds == 1 else "review", "args": {"round": rounds},
+                          "result": f"failed: {type(e).__name__}: {str(e)[:200]}"})
+            if findings:  # review failed: write the report from what the researchers found
+                await stage("Lead", "review failed; writing from the findings so far")
+                break
+            if lead_retried or remaining() <= 80:  # planning failed twice, or no time to retry: nothing to write from
+                raise
+            lead_retried, rounds = True, rounds - 1
+            continue
         trace.append({"agent": "Lead", "name": "plan" if rounds == 1 else "review",
                       "args": {"round": rounds}, "result": _short(turn.model_dump())})
         tasks = turn.subtasks[: config.MAX_RESEARCHERS - launched]
@@ -176,8 +189,18 @@ async def answer(message: str, session_id: str | None = None, emit: Emit = None)
     problems, report, result = None, "", VerifyResult(passed=False)
     for attempt in range(config.WRITER_RETRIES + 1):
         await stage("Writer", "writing the report" if attempt == 0 else "fixing verification problems")
-        report = await run_agent(agents.writer(), agents.writer_prompt(brief, findings, ledger, problems),
-                                 "writer", trace, emit, min(config.AGENT_TIMEOUT_S["writer"], max(remaining(), 30)))
+        try:
+            draft = await run_agent(agents.writer(), agents.writer_prompt(brief, findings, ledger, problems),
+                                    "writer", trace, emit, min(config.AGENT_TIMEOUT_S["writer"], max(remaining(), 30)))
+        except Exception as e:
+            trace.append({"agent": "Writer", "name": "write", "args": {"attempt": attempt + 1},
+                          "result": f"failed: {type(e).__name__}: {str(e)[:200]}"})
+            if report:  # the rewrite failed: keep the first draft, with its verification note
+                break
+            if attempt < config.WRITER_RETRIES and remaining() > 30:
+                continue  # the first draft failed: one more try
+            raise
+        report = draft
         result = verify(report, ledger)
         trace.append({"agent": "Verifier", "name": "verify", "args": {"attempt": attempt + 1},
                       "result": _short(result.model_dump())})
@@ -190,7 +213,12 @@ async def answer(message: str, session_id: str | None = None, emit: Emit = None)
         report += ("\n\n> **Verification note:** some statements could not be matched to the evidence: "
                    + "; ".join(result.problems[:3]))
     report = _sources(report, ledger, result.cited_ids)
+    # Charts are drawn by code from the evidence the report cites, so they show the same verified numbers.
+    try:
+        charts = build_charts(report, ledger)
+    except Exception:  # a chart must never cost the user their answer
+        charts = []
     return Result(response=report, session_id=session_id, tool_calls=trace, status="answer",
                   brief=brief.model_dump(), findings=[f.model_dump() for f in findings],
                   verify=result.model_dump(), rounds=rounds, researchers=launched,
-                  seconds=round(time.monotonic() - t0, 1))
+                  seconds=round(time.monotonic() - t0, 1), charts=charts)

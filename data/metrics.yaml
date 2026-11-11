@@ -35,7 +35,7 @@ metrics:
   azm_total:
     unit: minutes
     description: Fitbit Active Zone Minutes (time in fat-burn, cardio and peak heart-rate zones; vigorous minutes count double).
-    caveat: Watch only, from 2026-10-31.
+    caveat: Watch only, from 2026-10-30 (a partial first day). A day with no zone minutes is 0, not missing.
     reference:
       target: 150
       op: ">="
@@ -107,10 +107,10 @@ metrics:
     description: Minutes asleep divided by time in bed for the main sleep.
   nap_minutes:
     unit: minutes
-    description: Minutes asleep in naps.
+    description: Minutes asleep in naps (0 on a day with a recorded night's sleep and no nap).
   exercise_sessions:
     unit: sessions
-    description: Number of logged exercise sessions (mostly auto-detected walks).
+    description: Number of workouts the watch recorded that day (walks it detected itself plus workouts started on the watch). Per-workout detail (type, minutes, heart-rate zone minutes, gym visits, heart rate during a workout) comes from the workouts and workout_heart_rate tools.
   temp_mean_c:
     unit: "°C"
     description: Daily mean outdoor temperature in New York City (Open-Meteo).

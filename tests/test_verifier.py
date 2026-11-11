@@ -46,6 +46,14 @@ def test_month_year_and_iso_month_are_dates_not_numbers():
     assert verify(report, ledger()).passed
 
 
+def test_clock_times_and_zone_names_are_labels_not_numbers():
+    report = ("The run at 18:52 and the walk at 7:30 pm both appear [E1]. The \"Zone 2\" session started at 7 pm "
+              "and averaged 446 minutes [E1]." + LIMITS)
+    assert verify(report, ledger()).passed
+    problems = " | ".join(verify("At 19:01 you averaged 470 minutes [E1]." + LIMITS, ledger()).problems)
+    assert "470 is not in the cited evidence" in problems and "19" not in problems.split("evidence")[0]
+
+
 def test_blocks_diagnosis():
     r = verify("Your data suggests you have sleep apnea." + LIMITS, ledger())
     assert any("Diagnostic language" in p for p in r.problems)

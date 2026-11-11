@@ -201,6 +201,59 @@
   post: spearman
   target: "Not enough data: only {v2} nights pair with the previous day's activity (needs at least 10). Verdict: {v0}."
 
+# Workouts (suite v3, added 2026-11-11 after an independent review found the workout tools had no eval coverage).
+- id: workout_count
+  category: workout
+  question: "How many workouts did the watch record {label}, and how many minutes did they total?"
+  instances: [{label: "from 2026-10-31 to 2026-11-07", a: "2026-10-31", b: "2026-11-07"}, {label: "on 2026-11-02", a: "2026-11-02", b: "2026-11-02"}]
+  gold_sql: "SELECT count(*), sum(active_minutes) FROM exercise WHERE date BETWEEN DATE '{a}' AND DATE '{b}'"
+  target: "{v0} workouts totalling about {v1:.0f} minutes {label}."
+  numbers: [0, 1]
+
+- id: workout_type_minutes
+  category: workout
+  question: "How many elliptical sessions have I done, and how many minutes in total?"
+  instances: [{}]
+  gold_sql: "SELECT count(*), sum(active_minutes) FROM exercise WHERE type = 'ELLIPTICAL'"
+  target: "{v0} elliptical sessions totalling about {v1:.0f} minutes (all between 2026-11-01 and 2026-11-04)."
+  numbers: [0, 1]
+
+- id: workout_hardest
+  category: workout
+  question: "Which single workout had the most minutes in the vigorous and peak heart-rate zones?"
+  instances: [{}]
+  gold_sql: >-
+    SELECT vigorous_min + peak_min, strftime(start_local, '%Y-%m-%d %H:%M'), type FROM exercise
+    ORDER BY 1 DESC, start_local LIMIT 1
+  target: "The {v2} workout starting {v1}, with {v0:.0f} vigorous + peak minutes."
+  numbers: [0]
+
+- id: workout_zone_name
+  category: workout
+  question: "Was my Zone 2 treadmill session on 2026-11-01 really zone 2?"
+  instances: [{}]
+  gold_sql: "SELECT moderate_min, light_min, avg_hr FROM exercise WHERE date = DATE '2026-11-01' AND type = 'TREADMILL'"
+  target: >-
+    Reports Fitbit's own zone minutes for that session (about {v0:.0f} moderate and {v1:.0f} light, average heart
+    rate about {v2:.0f} bpm) and explains that Fitbit's zones are a different scale from the "Zone 2" in the
+    workout's name, so the data can't settle it. It must NOT answer yes or no, and must not say the session
+    "was" or "corresponds to" zone 2.
+  numbers: [0]
+
+- id: workout_heart_rate
+  category: workout
+  question: "What was my heart rate like during the elliptical that started at 19:01 on 2026-11-02?"
+  instances: [{}]
+  gold_sql: >-
+    SELECT e.avg_hr, median(h.bpm), max(h.bpm) FROM exercise e JOIN workout_hr h ON h.visit = e.visit
+    AND h.offset_s + 5 BETWEEN epoch(e.start_local - (SELECT min(start_local) FROM exercise x WHERE x.visit = e.visit))
+    AND epoch(e.end_local - (SELECT min(start_local) FROM exercise x WHERE x.visit = e.visit))
+    WHERE e.type = 'ELLIPTICAL' AND strftime(e.start_local, '%Y-%m-%d %H:%M') = '2026-11-02 19:01' GROUP BY e.avg_hr
+  target: >-
+    High throughout: a median of about {v1:.0f} bpm in the 10-second readings (Fitbit's own average: {v0:.0f} bpm),
+    peaking near {v2:.0f} bpm. Either the median or Fitbit's average is acceptable as the headline number. It should
+    note that wrist heart rate can be less accurate on an elliptical.
+
 - id: out_of_coverage
   category: refuse
   question: "{q}"

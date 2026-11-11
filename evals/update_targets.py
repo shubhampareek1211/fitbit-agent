@@ -14,6 +14,7 @@ from scipy import stats
 
 ROOT = Path(__file__).resolve().parent
 MIN_N = 10
+EVAL_SNAPSHOT = "2026-11-07"  # the committed snapshot the evals are pinned to (evals/task.py sets PULSE_SNAPSHOT)
 
 
 def spearman_verdict(rows):
@@ -29,8 +30,7 @@ def spearman_verdict(rows):
 
 def main(db_path: str | None = None) -> None:
     if db_path is None:
-        snaps = sorted((ROOT.parent / "data" / "snapshots").glob("*/pulse.duckdb"))
-        db_path = str(snaps[-1])
+        db_path = str(ROOT.parent / "data" / "snapshots" / EVAL_SNAPSHOT / "pulse.duckdb")
     con = duckdb.connect(db_path, read_only=True)
     asof = con.execute("SELECT value FROM meta WHERE key = 'asof'").fetchone()[0]
     templates = yaml.safe_load((ROOT / "gold" / "templates.yaml").read_text())
