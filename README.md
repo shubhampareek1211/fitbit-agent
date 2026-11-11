@@ -230,11 +230,56 @@ query the data:
 Tools: `get_coverage`, `list_metrics`, `get_daily`, `summarize_metric`, `compare_periods`, `compare_groups`,
 `correlate`, `check_guideline`, `sleep_sessions`, `workouts`, `workout_heart_rate`.
 
-In Claude: *Settings → Connectors → Add custom connector*, then paste the URL. To explore it by hand:
+Connect it (keep the final `/` in the URL; no login is needed):
 
-```bash
-npx @modelcontextprotocol/inspector      # then connect to the URL above
+- **Claude:** *Settings → Connectors → Add custom connector*, then paste the URL.
+- **ChatGPT:** turn on *Developer mode* under *Settings → Apps & Connectors → Advanced settings*, create a connector
+  with the URL, and choose *No authentication*.
+- **By hand:** `npx @modelcontextprotocol/inspector`, then connect to the URL.
+
+### What happens when a chatbot uses the connector
+
+Only the tools run. The chatbot is the agent: it reads the tool list, decides which tools to call, and writes the
+answer itself. Pulse's own agents and its Verifier are not involved.
+
+```mermaid
+flowchart LR
+  U([You: how did I sleep yesterday?]) --> C[ChatGPT or Claude<br/>picks the tools, writes the answer]
+  C -->|get_coverage, sleep_sessions| T[Pulse tools<br/>fixed queries, no model]
+  T --> S[(Newest snapshot)]
+  T -->|numbers with an evidence id| C
+  C --> A([Answer in the chatbot's own words])
+
+  classDef agent fill:#e3e8ff,stroke:#2b4bff,color:#0e1430
+  classDef code fill:#dcf3ea,stroke:#0b7a5c,color:#0e1430
+  classDef data fill:#fbefd2,stroke:#8a5a00,color:#0e1430
+  class C agent
+  class T code
+  class S data
 ```
+
+1. On connecting, the chatbot fetches the names and descriptions of the 11 tools.
+2. For a question it chooses which to call. Here: `get_coverage`, then `sleep_sessions` for 2026-11-10.
+3. The server runs each tool, a fixed query against the newest snapshot, and returns plain numbers.
+4. The chatbot writes everything else: the layout, the wording and any judgement.
+
+A real answer from ChatGPT through the connector:
+
+<img src="docs/img/mcp-chatgpt-sleep.png" alt="ChatGPT answering 'how did I sleep yesterday' through the Pulse connector: 8 h 18 m asleep, 3:30 AM to 11:52 AM, with a stage breakdown" width="640">
+
+The numbers are Pulse's and match the snapshot (498 minutes asleep, 03:30 to 11:52). "Excellent duration", "My
+assessment" and the bedtime recommendation are ChatGPT's own, and nothing checked them.
+
+| | The website (`/chat`) | The MCP connector |
+|---|---|---|
+| Who plans the work | Pulse's Lead and Researchers, in parallel | The chatbot |
+| Who does the arithmetic | Pulse's tools | The same tools |
+| Who writes the answer | Pulse's Writer | The chatbot |
+| Verifier check on every number | Yes | No |
+| "Never diagnose", "say what the data can't tell" | Enforced | Only a hint in the server's instructions |
+| Speed | 30 to 60 seconds | A few seconds |
+
+The chatbot can only call these tools with their parameters. It never sees the database or the raw files.
 
 ## Deploy
 
