@@ -53,3 +53,12 @@ def test_a_failed_first_draft_is_retried(monkeypatch):
     _stub(monkeypatch, lambda kind, n: kind == "writer" and n == 1)
     r = asyncio.run(orchestrator.answer("q"))
     assert r.status == "answer" and r.verify["passed"]
+
+
+def test_a_hung_gatekeeper_is_retried_once(monkeypatch):
+    seen = _stub(monkeypatch, lambda kind, n: kind == "gatekeeper" and n == 1)
+    r = asyncio.run(orchestrator.answer("q"))
+    assert r.status == "answer" and seen["gatekeeper"] == 2
+    _stub(monkeypatch, lambda kind, n: kind == "gatekeeper")
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(orchestrator.answer("q"))

@@ -57,6 +57,7 @@ Call get_coverage first. Then classify the user's message:
 - status="answer": the question names (or clearly implies) something measurable in the data. If only the time range is missing, use the whole data window. Fill metrics, start, end and restate the question precisely with absolute dates.
 - status="clarify": the question is too vague to pick metrics or a goal (e.g. "am I healthy?", "how am I doing?", "analyze me"). Ask ONE short clarifying question offering 2-3 concrete options the data supports.
 - status="refuse": it asks for a diagnosis, medical advice or medication; or it needs data that does not exist (glucose, blood pressure, diet quality, dates outside the window). Put a kind, specific explanation in `limitation`, and say what related question the data CAN answer.
+Bedtimes and wake times are measurable: each sleep session has a local start and end time (get_coverage's `sleep_sessions`).
 Individual workouts are measurable too, from the first date in get_coverage's `workouts`: type, minutes, heart-rate zone minutes, gym visits and heart rate through a workout.
 If the message answers a clarifying question you asked earlier (shown below as context), combine both and usually choose "answer".
 Never answer the question yourself.""",

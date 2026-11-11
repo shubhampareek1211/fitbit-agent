@@ -199,7 +199,7 @@ Evals are part of the architecture, not an afterthought. The same deterministic 
 | Suite | Samples | Where they came from |
 |---|---|---|
 | `e2e` | 50 from 27 templates (≤ 3 per template); v1 = 42 frozen in `e2e_v1.jsonl` | **Gold**: hand-written templates in [evals/gold/templates.yaml](evals/gold/templates.yaml); answers computed by `gold_sql` on the snapshot ([evals/update_targets.py](evals/update_targets.py)), independent of the agent's tools. Categories: lookup, comparison, weather, device, guideline, trend, correlation, workout, refuse, clarify. |
-| `gatekeeper` | 25 | **Gold**: hand-labelled answer / clarify / refuse ([evals/gatekeeper.jsonl](evals/gatekeeper.jsonl)) |
+| `gatekeeper` | 28 | **Gold**: hand-labelled answer / clarify / refuse ([evals/gatekeeper.jsonl](evals/gatekeeper.jsonl)) |
 
 None of the eval questions appear in any prompt as few-shot examples (the prompts have none).
 
@@ -283,7 +283,7 @@ earlier runs recomputed from their stored traces).
 - The Lead sometimes plans the phone-only comparison in round 1 even though it's told not to (sample query 2, 2 of 5 runs), so that run has no follow-up round.
 - Watch-vs-phone single-day questions sometimes omit the merged total.
 - The Verifier occasionally flags harmless numbers such as "(1 day each)" or a band label like "under 10°C".
-- A Gatekeeper call occasionally hangs until its 45 s timeout and the answer is an error. Its retries cover HTTP errors, not hangs.
+- A Gatekeeper call occasionally hangs. It now times out at 30 s and is tried once more; two hangs in a row still return an error (seen once in 84 Gatekeeper runs made in parallel).
 - For "which workouts were most intense?", the first Researcher sometimes reports only totals, so the Lead spends a follow-up round asking for the individual workouts again.
 - The judge itself flipped on borderline criteria during calibration (hence majority-of-3).
 

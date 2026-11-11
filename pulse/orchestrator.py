@@ -92,8 +92,17 @@ async def gate(message: str, prior: dict | None, trace: list, emit: Emit = None)
     prompt = message if not prior else (
         f"Earlier the user asked: {prior['question']}\nYou asked them: {prior['clarification']}\n"
         f"Their reply: {message}")
-    return _parse(Brief, await run_agent(agents.gatekeeper(), prompt, "gatekeeper", trace, emit,
-                                         config.AGENT_TIMEOUT_S["gatekeeper"]))
+    # The Gatekeeper's first model call occasionally hangs until its timeout (4 times in ~120 runs on 2026-11-10;
+    # HTTP retries don't cover a hang) and is sometimes unparseable. Its usual latency is ~6 s, so try once more.
+    for attempt in range(config.GATEKEEPER_RETRIES + 1):
+        try:
+            return _parse(Brief, await run_agent(agents.gatekeeper(), prompt, "gatekeeper", trace, emit,
+                                                 config.AGENT_TIMEOUT_S["gatekeeper"]))
+        except Exception as e:
+            trace.append({"agent": "Gatekeeper", "name": "classify", "args": {"attempt": attempt + 1},
+                          "result": f"failed: {type(e).__name__}: {str(e)[:200]}"})
+            if attempt == config.GATEKEEPER_RETRIES:
+                raise
 
 
 async def answer(message: str, session_id: str | None = None, emit: Emit = None) -> Result:

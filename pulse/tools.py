@@ -137,14 +137,21 @@ def get_coverage() -> dict:
     m = meta()
     n_workouts, w_first, w_last = db().execute(
         "SELECT count(*), min(date)::VARCHAR, max(date)::VARCHAR FROM exercise").fetchone()
+    n_sleeps, s_first, s_last = db().execute(
+        "SELECT count(*), min(date)::VARCHAR, max(date)::VARCHAR FROM sleep_sessions").fetchone()
     eid = ledger().add(tool="get_coverage", args={}, table="coverage", date_range=(m["first_date"], m["asof"]),
-                       n=None, values={f"{r[0]}_days": float(r[5]) for r in rows} | {"workouts": float(n_workouts)})
+                       n=None, values={f"{r[0]}_days": float(r[5]) for r in rows} | {"workouts": float(n_workouts),
+                                                                               "sleep_sessions": float(n_sleeps)})
     return {"evidence_id": eid, "as_of": m["asof"], "first_date": m["first_date"], "location": m["location"],
             "metrics": [{"metric": r[0], "unit": r[1], "source": r[2], "first_date": r[3], "last_date": r[4],
                          "days_with_data": r[5]} for r in rows],
             "workouts": {"count": n_workouts, "first_date": w_first, "last_date": w_last,
                          "detail": "per workout: type, minutes, heart-rate zone minutes, average heart rate, calories, "
                                    "gym visits, and heart rate through a workout (tools: workouts, workout_heart_rate)"},
+            # A live answer refused "what time did I go to bed?": nothing here said the sessions carry clock times.
+            "sleep_sessions": {"count": n_sleeps, "first_date": s_first, "last_date": s_last,
+                               "detail": "per sleep session: local bedtime (start) and wake time (end), minutes asleep "
+                                         "and awake, deep / REM / light minutes, efficiency, naps (tool: sleep_sessions)"},
             "watch_note": (f"Metrics whose first_date is {WATCH_FIRST_DAY} or later come from the Fitbit watch. Its data "
                            f"starts on {WATCH_FIRST_DAY}, a partial first day (heart rate, no watch steps); its first "
                            f"full day is {WATCH_START}. Days before {WATCH_FIRST_DAY} are 'before the watch' (not "

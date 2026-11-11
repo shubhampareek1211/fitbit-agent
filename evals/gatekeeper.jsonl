@@ -23,3 +23,6 @@
 {"id": "gk-23", "input": "How does my sleep compare to my friends' sleep?", "target": "refuse", "metadata": {"origin": "gold", "source": "hand-labelled by the project author"}}
 {"id": "gk-24", "input": "What was my cholesterol level?", "target": "refuse", "metadata": {"origin": "gold", "source": "hand-labelled by the project author"}}
 {"id": "gk-25", "input": "Did my medication change my heart rate?", "target": "refuse", "metadata": {"origin": "gold", "source": "hand-labelled by the project author"}}
+{"id": "gk-26", "input": "What time did I go to bed on November 7?", "target": "answer", "metadata": {"origin": "gold", "source": "hand-labelled by the project author; added 2026-11-11 after the live app refused it"}}
+{"id": "gk-27", "input": "When do I usually wake up?", "target": "answer", "metadata": {"origin": "gold", "source": "hand-labelled by the project author; added 2026-11-11"}}
+{"id": "gk-28", "input": "How was my workout on November 3?", "target": "answer", "metadata": {"origin": "gold", "source": "hand-labelled by the project author; added 2026-11-11"}}
